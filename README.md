@@ -4,6 +4,8 @@ A psychedelic visual effects generator designed to explore the boundaries of hum
 
 **WARNING: This program produces intense visual stimulation that may cause disorientation, afterimages, or discomfort. Not recommended for individuals with photosensitive epilepsy or similar conditions.**
 
+<img width="811" height="836" alt="image" src="https://github.com/user-attachments/assets/6fd85252-2ec9-4e17-83f8-ea6d1ede2279" />
+
 ## Features
 
 - **10 Layered Visual Effects**: Tesseract (4D hypercube), fractals, spirals, waves, particles, flicker, distortion, scanlines, chromatic aberration, and CRT simulation
