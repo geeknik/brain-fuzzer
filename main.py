@@ -50,9 +50,23 @@ class Config:
     enable_chromatic: bool = True
     enable_scanlines: bool = True
     enable_crt: bool = True
+    enable_stroboscopic: bool = False
+    enable_moire: bool = False
+    enable_aftereffect: bool = False
+    enable_peripheral_drift: bool = False
+    enable_ganzfeld: bool = False
+    enable_hermann_grid: bool = False
+    enable_opponent_color: bool = False
+    enable_looming: bool = False
+    enable_luminance_transient: bool = False
+    enable_novelty_injector: bool = False
+    enable_ambiguity_resolve: bool = False
+    stroboscopic_freq: float = 10.0
+    gamma_mode: bool = False
     color_cycle_speed: float = 0.02
     high_contrast_mode: bool = False
     color_mode: str = "psychedelic"
+    brain_mode: bool = False
     log_level: int = logging.INFO
     preset_file: str = ""
 
@@ -72,7 +86,13 @@ class Config:
 
     @classmethod
     def load_preset(cls, filepath: str) -> "Config":
-        data = json.loads(Path(filepath).read_text())
+        raw = Path(filepath).read_text(encoding="utf-8")
+        data = json.loads(raw)
+        if not isinstance(data, dict):
+            raise ValueError("Preset file must contain a JSON object")
+        unknown = set(data.keys()) - set(cls.__dataclass_fields__.keys())
+        if unknown:
+            raise ValueError(f"Unknown preset keys: {unknown}")
         return cls.from_dict(data)
 
 
@@ -140,7 +160,7 @@ Examples:
     )
     session.add_argument(
         "--color-mode",
-        choices=["psychedelic", "fire", "ice", "matrix", "monochrome"],
+        choices=["psychedelic", "fire", "ice", "matrix", "monochrome", "dopamine"],
         default="psychedelic",
     )
     session.add_argument(
@@ -175,6 +195,64 @@ Examples:
     )
     effects.add_argument("--no-crt", action="store_true", help="Disable CRT effect")
 
+    brain = parser.add_argument_group("Brain Fuzzing (new perceptual effects)")
+    brain.add_argument(
+        "--stroboscopic", action="store_true",
+        help="Enable stroboscopic flicker (8-13 Hz alpha-wave entrainment)"
+    )
+    brain.add_argument(
+        "--strobe-freq", type=float, default=10.0,
+        help="Stroboscopic frequency in Hz (default: 10, range: 4-30)"
+    )
+    brain.add_argument(
+        "--moire", action="store_true",
+        help="Enable Moiré interference patterns"
+    )
+    brain.add_argument(
+        "--aftereffect", action="store_true",
+        help="Enable motion aftereffect (waterfall illusion) spiral"
+    )
+    brain.add_argument(
+        "--peripheral-drift", action="store_true",
+        help="Enable peripheral drift illusion (Kitaoka-style)"
+    )
+    brain.add_argument(
+        "--ganzfeld", action="store_true",
+        help="Enable Ganzfeld effect (uniform field perceptual deprivation)"
+    )
+    brain.add_argument(
+        "--hermann-grid", action="store_true",
+        help="Enable Hermann grid (illusory spots at intersections)"
+    )
+    brain.add_argument(
+        "--opponent-color", action="store_true",
+        help="Enable opponent-color afterimage induction"
+    )
+    brain.add_argument(
+        "--brain-mode", action="store_true",
+        help="Enable brain-mode sequencer (auto-cycles perceptual effects)"
+    )
+    brain.add_argument(
+        "--looming", action="store_true",
+        help="Enable looming effect (radially expanding objects, SC->VTA pathway)"
+    )
+    brain.add_argument(
+        "--luminance-transient", action="store_true",
+        help="Enable luminance transients (sharp dark-to-light flashes, direct LNAc DA)"
+    )
+    brain.add_argument(
+        "--novelty-injector", action="store_true",
+        help="Enable novelty injector (variable ratio reward schedule)"
+    )
+    brain.add_argument(
+        "--ambiguity-resolve", action="store_true",
+        help="Enable ambiguity-resolve (blur-to-clarity curiosity/dopamine loop)"
+    )
+    brain.add_argument(
+        "--gamma-mode", action="store_true",
+        help="Force stroboscopic to 36Hz red-light gamma entrainment"
+    )
+
     presets = parser.add_argument_group("Presets")
     presets.add_argument("-p", "--preset", type=str, help="Load preset from JSON file")
     presets.add_argument(
@@ -197,7 +275,9 @@ Examples:
 
 
 def config_from_args(args: argparse.Namespace) -> Config:
-    if args.preset and Path(args.preset).exists():
+    if args.preset and args.preset in BUILTIN_PRESETS:
+        config = Config.from_dict(BUILTIN_PRESETS[args.preset])
+    elif args.preset and Path(args.preset).exists():
         config = Config.load_preset(args.preset)
     else:
         config = Config()
@@ -223,6 +303,21 @@ def config_from_args(args: argparse.Namespace) -> Config:
     config.enable_scanlines = not args.no_scanlines
     config.enable_crt = not args.no_crt
 
+    config.enable_stroboscopic = args.stroboscopic
+    config.stroboscopic_freq = max(4.0, min(30.0, args.strobe_freq))
+    config.enable_moire = args.moire
+    config.enable_aftereffect = args.aftereffect
+    config.enable_peripheral_drift = args.peripheral_drift
+    config.enable_ganzfeld = args.ganzfeld
+    config.enable_hermann_grid = args.hermann_grid
+    config.enable_opponent_color = args.opponent_color
+    config.brain_mode = args.brain_mode
+    config.enable_looming = args.looming
+    config.enable_luminance_transient = args.luminance_transient
+    config.enable_novelty_injector = args.novelty_injector
+    config.enable_ambiguity_resolve = args.ambiguity_resolve
+    config.gamma_mode = args.gamma_mode
+
     if args.verbose:
         config.log_level = logging.DEBUG
     elif args.quiet:
@@ -247,7 +342,110 @@ BUILTIN_PRESETS = {
         "enable_particles": False,
     },
     "chaos": {"intensity": 1.0, "chaos": 1.0, "high_contrast_mode": True},
+    "dreamachine": {
+        "intensity": 0.8,
+        "chaos": 0.2,
+        "enable_stroboscopic": True,
+        "stroboscopic_freq": 10.0,
+        "enable_ganzfeld": True,
+        "enable_flicker": False,
+        "enable_fractals": False,
+        "enable_particles": False,
+        "enable_tesseract": False,
+        "color_mode": "psychedelic",
+    },
+    "perception": {
+        "intensity": 0.7,
+        "chaos": 0.3,
+        "enable_moire": True,
+        "enable_aftereffect": True,
+        "enable_peripheral_drift": True,
+        "enable_hermann_grid": True,
+        "enable_flicker": False,
+        "enable_distortion": False,
+        "color_mode": "monochrome",
+    },
+    "full-brain": {
+        "intensity": 0.9,
+        "chaos": 0.6,
+        "enable_stroboscopic": True,
+        "stroboscopic_freq": 10.0,
+        "enable_moire": True,
+        "enable_aftereffect": True,
+        "enable_peripheral_drift": True,
+        "enable_ganzfeld": True,
+        "enable_hermann_grid": True,
+        "enable_opponent_color": True,
+        "brain_mode": True,
+        "color_mode": "psychedelic",
+    },
+    "afterimage": {
+        "intensity": 0.8,
+        "chaos": 0.1,
+        "enable_opponent_color": True,
+        "enable_ganzfeld": True,
+        "enable_flicker": False,
+        "enable_tesseract": False,
+        "enable_fractals": False,
+        "enable_spirals": False,
+        "enable_waves": False,
+        "enable_particles": False,
+        "enable_distortion": False,
+        "enable_scanlines": False,
+        "enable_chromatic": False,
+        "enable_crt": False,
+        "color_mode": "psychedelic",
+    },
+    "dopamine-stack": {
+        "intensity": 0.9,
+        "chaos": 0.5,
+        "enable_looming": True,
+        "enable_luminance_transient": True,
+        "enable_novelty_injector": True,
+        "enable_stroboscopic": True,
+        "stroboscopic_freq": 10.0,
+        "color_mode": "dopamine",
+    },
+    "subcortical": {
+        "intensity": 0.85,
+        "chaos": 0.4,
+        "enable_looming": True,
+        "enable_luminance_transient": True,
+        "enable_aftereffect": True,
+        "enable_flicker": False,
+        "enable_fractals": False,
+        "enable_particles": False,
+        "color_mode": "dopamine",
+    },
+    "curiosity": {
+        "intensity": 0.7,
+        "chaos": 0.3,
+        "enable_ambiguity_resolve": True,
+        "enable_novelty_injector": True,
+        "enable_ganzfeld": True,
+        "enable_flicker": False,
+        "enable_tesseract": False,
+        "color_mode": "psychedelic",
+    },
+    "gamma-red": {
+        "intensity": 0.9,
+        "chaos": 0.2,
+        "enable_stroboscopic": True,
+        "stroboscopic_freq": 36.0,
+        "gamma_mode": True,
+        "enable_looming": True,
+        "enable_flicker": False,
+        "enable_fractals": False,
+        "enable_particles": False,
+        "enable_tesseract": False,
+        "color_mode": "dopamine",
+    },
 }
+
+
+def clamp_rgb(r: int, g: int, b: int) -> tuple[int, int, int]:
+    """Clamp RGB values to valid 0-255 range."""
+    return (max(0, min(255, r)), max(0, min(255, g)), max(0, min(255, b)))
 
 
 def hsv_to_rgb(h: float, s: float, v: float) -> tuple[int, int, int]:
@@ -261,7 +459,7 @@ def hsv_to_rgb(h: float, s: float, v: float) -> tuple[int, int, int]:
 
     rgb = [(v, t, p), (q, v, p), (p, v, t), (p, q, v), (t, p, v), (v, p, q)][i % 6]
 
-    return (int(rgb[0] * 255), int(rgb[1] * 255), int(rgb[2] * 255))
+    return clamp_rgb(int(rgb[0] * 255), int(rgb[1] * 255), int(rgb[2] * 255))
 
 
 _current_color_mode: str = "psychedelic"
@@ -281,21 +479,20 @@ def get_color(
     if mode == "psychedelic":
         return hsv_to_rgb(hue, saturation, value)
     elif mode == "fire":
-        r = int(255 * value)
-        g = int((100 + 155 * hue) * value)
-        b = int(50 * (1 - hue) * value)
-        return (r, g, b)
+        return clamp_rgb(int(255 * value), int((100 + 155 * hue) * value),
+                         int(50 * (1 - hue) * value))
     elif mode == "ice":
-        r = int((100 + 100 * (1 - hue)) * value)
-        g = int((180 + 75 * hue) * value)
-        b = int(255 * value)
-        return (r, min(255, g), b)
+        return clamp_rgb(int((100 + 100 * (1 - hue)) * value),
+                         int((180 + 75 * hue) * value), int(255 * value))
     elif mode == "matrix":
-        intensity = int((100 + 155 * hue) * value)
-        return (0, intensity, int(intensity * 0.3))
+        intensity_val = int((100 + 155 * hue) * value)
+        return clamp_rgb(0, intensity_val, int(intensity_val * 0.3))
     elif mode == "monochrome":
         gray = int(255 * hue * value)
-        return (gray, gray, gray)
+        return clamp_rgb(gray, gray, gray)
+    elif mode == "dopamine":
+        warm_hue = (hue * 0.12) % 1.0
+        return hsv_to_rgb(warm_hue, max(0.85, saturation), value)
     else:
         return hsv_to_rgb(hue, saturation, value)
 
@@ -317,6 +514,9 @@ def get_glitch_color() -> tuple[int, int, int]:
     elif mode == "monochrome":
         g = random.randint(100, 255)
         return (g, g, g)
+    elif mode == "dopamine":
+        return clamp_rgb(random.randint(200, 255), random.randint(50, 180),
+                         random.randint(0, 40))
     return (random.randint(180, 255), random.randint(0, 255), random.randint(0, 255))
 
 
@@ -491,8 +691,8 @@ class TesseractEffect(Effect):
                         )
 
                     pygame.draw.line(surface, color, p1, p2, thickness)
-                except (IndexError, TypeError):
-                    pass
+                except (IndexError, TypeError, OverflowError):
+                    continue
 
         for i, point in enumerate(projected):
             color = get_psychedelic_color(offset=i * 0.05 + state.hue_offset)
@@ -802,22 +1002,30 @@ class ParticleEffect(Effect):
 
 
 class FlickerEffect(Effect):
-    """Background flicker and texture noise."""
+    """Time-based periodic background flicker and texture noise.
+
+    Refactored to use delta_time-based phase accumulation instead of
+    frame counter. Regular periodic flicker is crucial for neural
+    entrainment — irregular flicker fails to synchronize oscillations.
+    High-contrast mode now flickers at a consistent ~15 Hz (tunable).
+    """
 
     def __init__(self, config: Config):
         super().__init__(config)
-        self.flicker_state = 0
+        self.phase = 0.0
+        self.flicker_freq = 15.0
         self.colors = [(255, 255, 255), (0, 0, 0)]
 
     def update(self, state: State) -> None:
-        self.flicker_state += 1
+        self.phase += state.delta_time * self.flicker_freq * 2 * math.pi
 
     def render(self, surface: pygame.Surface, state: State) -> None:
         if not self.enabled:
             return
 
         if self.config.high_contrast_mode:
-            bg_color = self.colors[self.flicker_state % 2]
+            flicker_on = math.sin(self.phase) > 0
+            bg_color = self.colors[0 if flicker_on else 1]
             surface.fill(bg_color)
 
         noise_count = int(100 * self.config.chaos * self.config.intensity)
@@ -1028,6 +1236,993 @@ class CRTEffect(Effect):
             pass
 
 
+class StroboscopicEffect(Effect):
+    """Multi-band frequency flicker: alpha (8-13 Hz), beta (13-30 Hz), gamma (34-40 Hz).
+
+    Alpha band: Dreamachine principle, phosphene induction.
+    Gamma band at 34-38 Hz with RED light produces the strongest gamma waves
+    that spread beyond visual cortex into wider brain networks (research
+    Section II.1). White light is second-most effective.
+
+    When gamma_mode is enabled, forces frequency to 36 Hz with red-dominant light.
+    """
+
+    def __init__(self, config: Config):
+        super().__init__(config)
+        self.phase = 0.0
+        self.frequency = config.stroboscopic_freq
+        self.gamma_mode = config.gamma_mode
+        self.strobe_surface: pygame.Surface | None = None
+
+        if self.gamma_mode:
+            self.frequency = 36.0
+
+    def update(self, state: State) -> None:
+        self.phase += state.delta_time * self.frequency * 2 * math.pi
+        if not self.gamma_mode:
+            if self.config.chaos > 0.3 and random.random() < 0.02 * self.config.chaos:
+                self.frequency = self.config.stroboscopic_freq + random.uniform(-2.0, 2.0)
+                self.frequency = max(4.0, min(45.0, self.frequency))
+        else:
+            if self.config.chaos > 0.5 and random.random() < 0.01:
+                self.frequency = 36.0 + random.uniform(-2.0, 2.0)
+                self.frequency = max(34.0, min(40.0, self.frequency))
+
+    def render(self, surface: pygame.Surface, state: State) -> None:
+        if not self.enabled:
+            return
+
+        brightness = (math.sin(self.phase) + 1.0) / 2.0
+        if self.gamma_mode:
+            brightness = 1.0 if brightness > 0.5 else 0.0
+        else:
+            brightness = brightness ** 0.5
+
+        alpha = int(brightness * 220 * self.config.intensity)
+        alpha = max(0, min(255, alpha))
+
+        if (
+            self.strobe_surface is None
+            or self.strobe_surface.get_size() != surface.get_size()
+        ):
+            self.strobe_surface = pygame.Surface(surface.get_size(), pygame.SRCALPHA)
+
+        if self.gamma_mode:
+            red_val = int(255 * brightness)
+            color = clamp_rgb(red_val, int(red_val * 0.15), int(red_val * 0.05))
+        else:
+            color = get_color(offset=state.hue_offset, value=brightness)
+
+        self.strobe_surface.fill((*color, alpha))
+        surface.blit(self.strobe_surface, (0, 0))
+
+
+class MoireEffect(Effect):
+    """Overlapping rotating line grids creating interference patterns.
+
+    Moiré patterns emerge when two regular patterns overlap at slight angles.
+    The brain perceives phantom motion, texture, and depth that doesn't exist
+    in any single grid layer. The effect exploits spatial frequency processing
+    in the visual cortex.
+    """
+
+    def __init__(self, config: Config):
+        super().__init__(config)
+        self.grid_angles = [0.0, 0.3, 0.7]
+        self.grid_speeds = [0.008, -0.012, 0.006]
+
+    def update(self, state: State) -> None:
+        for i in range(len(self.grid_angles)):
+            speed_mod = 1.0 + self.config.chaos * random.uniform(-0.3, 0.3)
+            self.grid_angles[i] += self.grid_speeds[i] * self.config.intensity * speed_mod
+
+    def render(self, surface: pygame.Surface, state: State) -> None:
+        if not self.enabled:
+            return
+
+        cx, cy = self.config.width // 2, self.config.height // 2
+        max_extent = int(math.sqrt(cx * cx + cy * cy)) + 20
+
+        spacing = max(8, int(20 - 10 * self.config.intensity))
+
+        for grid_idx, angle in enumerate(self.grid_angles):
+            color = get_color(
+                offset=grid_idx * 0.33 + state.hue_offset,
+                value=0.6 + 0.4 * self.config.intensity,
+            )
+            cos_a, sin_a = math.cos(angle), math.sin(angle)
+
+            for offset in range(-max_extent, max_extent, spacing):
+                x1 = cx + offset * cos_a - max_extent * sin_a
+                y1 = cy + offset * sin_a + max_extent * cos_a
+                x2 = cx + offset * cos_a + max_extent * sin_a
+                y2 = cy + offset * sin_a - max_extent * cos_a
+
+                try:
+                    pygame.draw.line(surface, color,
+                                     (int(x1), int(y1)), (int(x2), int(y2)), 1)
+                except (OverflowError, TypeError):
+                    continue
+
+
+class MotionAftereffect(Effect):
+    """Continuously expanding/contracting spiral for waterfall illusion.
+
+    After prolonged viewing (30+ seconds) of this expanding spiral, looking at
+    a stationary surface causes it to appear to contract (and vice versa).
+    This exploits direction-selective neurons in area V5/MT that fatigue
+    from sustained stimulation in one direction.
+    """
+
+    def __init__(self, config: Config):
+        super().__init__(config)
+        self.expansion_phase = 0.0
+        self.rotation_phase = 0.0
+        self.direction = 1.0
+
+    def update(self, state: State) -> None:
+        speed = 2.0 * self.config.intensity
+        self.expansion_phase += state.delta_time * speed * self.direction
+        self.rotation_phase += state.delta_time * 1.5
+
+        if self.config.chaos > 0.5 and random.random() < 0.005 * self.config.chaos:
+            self.direction *= -1.0
+
+    def render(self, surface: pygame.Surface, state: State) -> None:
+        if not self.enabled:
+            return
+
+        cx, cy = self.config.width // 2, self.config.height // 2
+        max_radius = min(cx, cy) * 0.9
+
+        num_arms = 8
+        points_per_arm = 80
+
+        for arm in range(num_arms):
+            base_angle = arm * 2 * math.pi / num_arms + self.rotation_phase
+            points = []
+
+            for i in range(points_per_arm):
+                t = i / points_per_arm
+                radius = max_radius * t
+
+                log_spiral_offset = (
+                    math.log(t + 0.01) * 2.0 + self.expansion_phase
+                )
+                angle = base_angle + log_spiral_offset
+
+                x = cx + radius * math.cos(angle)
+                y = cy + radius * math.sin(angle)
+                points.append((x, y))
+
+            if len(points) > 1:
+                color = get_color(
+                    offset=arm * 0.125 + state.hue_offset,
+                    value=0.8 + 0.2 * self.config.intensity,
+                )
+                thickness = max(1, int(3 * self.config.intensity))
+                try:
+                    pygame.draw.lines(surface, color, False, points, thickness)
+                except (ValueError, TypeError):
+                    continue
+
+        pygame.draw.circle(surface, (255, 255, 255), (cx, cy), 4)
+        pygame.draw.circle(surface, (0, 0, 0), (cx, cy), 2)
+
+
+class PeripheralDriftEffect(Effect):
+    """Repeated asymmetric luminance patterns (Kitaoka/Rotating Snakes).
+
+    Uses the luminance sequence dark -> medium-dark -> light -> medium-light
+    arranged in a specific spatial pattern. Under peripheral viewing, this
+    asymmetric luminance profile triggers motion signals in the visual cortex
+    despite the pattern being entirely stationary. The effect is strongest
+    in peripheral vision and disappears under direct fixation.
+    """
+
+    def __init__(self, config: Config):
+        super().__init__(config)
+        self.cell_size = 40
+        self.rotation = 0.0
+
+    def update(self, state: State) -> None:
+        self.rotation += state.delta_time * 0.3 * self.config.intensity
+
+    def render(self, surface: pygame.Surface, state: State) -> None:
+        if not self.enabled:
+            return
+
+        cell = self.cell_size
+        cols = self.config.width // cell + 2
+        rows = self.config.height // cell + 2
+
+        luminance_seq = [40, 100, 220, 160]
+
+        for row in range(rows):
+            for col in range(cols):
+                x = col * cell
+                y = row * cell
+
+                direction = 1 if (row + col) % 2 == 0 else -1
+                ring_count = 4
+                center_x = x + cell // 2
+                center_y = y + cell // 2
+
+                for ring in range(ring_count - 1, -1, -1):
+                    radius = int(cell * 0.45 * (ring + 1) / ring_count)
+                    if radius < 2:
+                        continue
+
+                    seq_idx = (ring * direction + int(self.rotation * 4)) % 4
+                    lum = luminance_seq[seq_idx]
+
+                    if _current_color_mode == "matrix":
+                        c = clamp_rgb(0, lum, int(lum * 0.3))
+                    elif _current_color_mode == "fire":
+                        c = clamp_rgb(lum, int(lum * 0.5), 0)
+                    elif _current_color_mode == "ice":
+                        c = clamp_rgb(int(lum * 0.5), int(lum * 0.8), lum)
+                    else:
+                        hue = (state.hue_offset + row * 0.05 + col * 0.05) % 1.0
+                        c = hsv_to_rgb(hue, 0.6 - 0.4 * (lum / 255.0), lum / 255.0)
+
+                    try:
+                        pygame.draw.circle(surface, c, (center_x, center_y), radius)
+                    except (OverflowError, TypeError):
+                        continue
+
+        cx, cy = self.config.width // 2, self.config.height // 2
+        pygame.draw.circle(surface, (255, 0, 0), (cx, cy), 6)
+        pygame.draw.circle(surface, (255, 255, 255), (cx, cy), 3)
+
+
+class GanzfeldEffect(Effect):
+    """Uniform pulsating color field for perceptual deprivation.
+
+    The Ganzfeld effect occurs when the visual field is filled with an
+    unstructured, uniform stimulus. After 10-20 minutes, the brain begins
+    generating its own percepts — colors, shapes, and hallucinatory images —
+    as it struggles to find structure in structureless input. The pulsation
+    helps maintain engagement while preserving the uniformity needed for
+    the effect.
+    """
+
+    def __init__(self, config: Config):
+        super().__init__(config)
+        self.hue_phase = 0.0
+        self.brightness_phase = 0.0
+        self.ganzfeld_surface: pygame.Surface | None = None
+
+    def update(self, state: State) -> None:
+        self.hue_phase += state.delta_time * 0.05 * self.config.intensity
+        self.brightness_phase += state.delta_time * 0.8 * (0.5 + self.config.chaos)
+
+    def render(self, surface: pygame.Surface, state: State) -> None:
+        if not self.enabled:
+            return
+
+        if (
+            self.ganzfeld_surface is None
+            or self.ganzfeld_surface.get_size() != surface.get_size()
+        ):
+            self.ganzfeld_surface = pygame.Surface(surface.get_size(), pygame.SRCALPHA)
+
+        brightness = 0.4 + 0.15 * math.sin(self.brightness_phase)
+        brightness += 0.05 * math.sin(self.brightness_phase * 1.7)
+
+        hue = self.hue_phase % 1.0
+        color = hsv_to_rgb(hue, 0.8, brightness)
+
+        alpha = int(180 * self.config.intensity)
+        self.ganzfeld_surface.fill((*color, max(0, min(255, alpha))))
+        surface.blit(self.ganzfeld_surface, (0, 0))
+
+
+class HermannGridEffect(Effect):
+    """Grid pattern exploiting lateral inhibition for illusory spots.
+
+    White/colored lines on a dark background create a regular grid. Due to
+    lateral inhibition in retinal ganglion cells, illusory dark spots appear
+    at the intersections in peripheral vision. The spots vanish when you
+    look directly at any intersection. This effect demonstrates that
+    perception is constructed, not passively received.
+    """
+
+    def __init__(self, config: Config):
+        super().__init__(config)
+        self.grid_spacing = 60
+        self.line_width = 12
+        self.phase = 0.0
+
+    def update(self, state: State) -> None:
+        self.phase += state.delta_time * 0.5
+
+        if self.config.chaos > 0.5 and random.random() < 0.01 * self.config.chaos:
+            self.grid_spacing = random.randint(40, 80)
+            self.line_width = random.randint(8, 18)
+
+    def render(self, surface: pygame.Surface, state: State) -> None:
+        if not self.enabled:
+            return
+
+        spacing = self.grid_spacing
+        width = self.line_width
+
+        if _current_color_mode == "matrix":
+            line_color = (0, int(180 * self.config.intensity), 0)
+        elif _current_color_mode == "fire":
+            line_color = (
+                int(255 * self.config.intensity),
+                int(120 * self.config.intensity), 0,
+            )
+        elif _current_color_mode == "ice":
+            line_color = (
+                int(100 * self.config.intensity),
+                int(180 * self.config.intensity),
+                int(255 * self.config.intensity),
+            )
+        else:
+            brightness = int(220 * self.config.intensity)
+            line_color = (brightness, brightness, brightness)
+
+        line_color = clamp_rgb(*line_color)
+
+        for x in range(0, self.config.width + spacing, spacing):
+            pygame.draw.line(
+                surface, line_color, (x, 0), (x, self.config.height), width
+            )
+
+        for y in range(0, self.config.height + spacing, spacing):
+            pygame.draw.line(
+                surface, line_color, (0, y), (self.config.width, y), width
+            )
+
+
+class OpponentColorEffect(Effect):
+    """Afterimage induction via opponent-process color adaptation.
+
+    Displays a saturated color field with a central fixation cross. After
+    sustained viewing (15-30 seconds), the cone cells responding to that
+    color fatigue. When the display switches to neutral gray, the viewer
+    perceives the complementary color as an afterimage. This demonstrates
+    opponent-process theory — the visual system's red/green, blue/yellow,
+    and light/dark channels.
+    """
+
+    def __init__(self, config: Config):
+        super().__init__(config)
+        self.cycle_timer = 0.0
+        self.adaptation_duration = 8.0
+        self.neutral_duration = 4.0
+        self.current_hue = random.random()
+        self.adapting = True
+        self.adaptation_surface: pygame.Surface | None = None
+
+    def update(self, state: State) -> None:
+        self.cycle_timer += state.delta_time
+
+        if self.adapting:
+            if self.cycle_timer >= self.adaptation_duration:
+                self.cycle_timer = 0.0
+                self.adapting = False
+        else:
+            if self.cycle_timer >= self.neutral_duration:
+                self.cycle_timer = 0.0
+                self.adapting = True
+                self.current_hue = (self.current_hue + 0.3 + random.uniform(-0.1, 0.1)) % 1.0
+
+        adapt_speed = 3.0 + 5.0 * self.config.chaos
+        self.adaptation_duration = max(adapt_speed, 6.0)
+        self.neutral_duration = max(2.0, self.adaptation_duration * 0.4)
+
+    def render(self, surface: pygame.Surface, state: State) -> None:
+        if not self.enabled:
+            return
+
+        if (
+            self.adaptation_surface is None
+            or self.adaptation_surface.get_size() != surface.get_size()
+        ):
+            self.adaptation_surface = pygame.Surface(
+                surface.get_size(), pygame.SRCALPHA
+            )
+
+        if self.adapting:
+            color = hsv_to_rgb(self.current_hue, 1.0, 0.9 * self.config.intensity)
+            alpha = int(200 * self.config.intensity)
+        else:
+            color = (128, 128, 128)
+            alpha = int(220 * self.config.intensity)
+
+        self.adaptation_surface.fill((*color, max(0, min(255, alpha))))
+        surface.blit(self.adaptation_surface, (0, 0))
+
+        cx, cy = self.config.width // 2, self.config.height // 2
+        cross_size = 15
+        cross_color = (0, 0, 0) if self.adapting else (80, 80, 80)
+        pygame.draw.line(
+            surface, cross_color,
+            (cx - cross_size, cy), (cx + cross_size, cy), 3,
+        )
+        pygame.draw.line(
+            surface, cross_color,
+            (cx, cy - cross_size), (cx, cy + cross_size), 3,
+        )
+
+
+class LoomingEffect(Effect):
+    """Radially expanding objects exploiting the SC→VTA subcortical fast lane.
+
+    Looming motion (radially expanding stimuli) is one of the most potent
+    activators of the superior colliculus, which drives dopamine responses
+    via a direct subcortical route at 70-150ms latency — faster than
+    conscious visual processing. The expansion should complete in 200-500ms
+    to match the temporal profile of phasic dopamine responses.
+    """
+
+    @dataclass
+    class LoomingObject:
+        x: float
+        y: float
+        radius: float
+        max_radius: float
+        expansion_rate: float
+        color_offset: float
+        shape: str
+        sides: int
+
+    def __init__(self, config: Config):
+        super().__init__(config)
+        self.objects: list[LoomingEffect.LoomingObject] = []
+        self.spawn_timer = 0.0
+        self.spawn_interval = 1.5
+
+    def _spawn(self) -> None:
+        cx = random.randint(int(self.config.width * 0.15),
+                            int(self.config.width * 0.85))
+        cy = random.randint(int(self.config.height * 0.15),
+                            int(self.config.height * 0.85))
+        max_r = max(self.config.width, self.config.height) * 0.8
+        duration = random.uniform(0.2, 0.5)
+        rate = max_r / duration
+
+        shape = random.choice(["circle", "polygon", "ring"])
+        self.objects.append(LoomingEffect.LoomingObject(
+            x=cx, y=cy, radius=3.0, max_radius=max_r,
+            expansion_rate=rate * self.config.intensity,
+            color_offset=random.random(),
+            shape=shape,
+            sides=random.randint(3, 8),
+        ))
+
+        if len(self.objects) > 6:
+            self.objects.pop(0)
+
+    def update(self, state: State) -> None:
+        self.spawn_timer += state.delta_time
+
+        interval = self.spawn_interval / (0.5 + self.config.intensity)
+        if self.config.chaos > 0.3:
+            interval *= random.uniform(0.4, 1.6)
+
+        if self.spawn_timer >= interval:
+            self.spawn_timer = 0.0
+            self._spawn()
+
+        for obj in self.objects:
+            obj.radius += obj.expansion_rate * state.delta_time
+
+        self.objects = [o for o in self.objects if o.radius < o.max_radius]
+
+    def render(self, surface: pygame.Surface, state: State) -> None:
+        if not self.enabled:
+            return
+
+        for obj in self.objects:
+            progress = obj.radius / obj.max_radius
+            alpha_factor = 1.0 - progress ** 2
+            color = get_color(offset=obj.color_offset + state.hue_offset,
+                              value=alpha_factor)
+
+            ix, iy, ir = int(obj.x), int(obj.y), int(obj.radius)
+            thickness = max(2, int(6 * (1.0 - progress) * self.config.intensity))
+
+            try:
+                if obj.shape == "circle":
+                    pygame.draw.circle(surface, color, (ix, iy), ir, thickness)
+                elif obj.shape == "ring":
+                    pygame.draw.circle(surface, color, (ix, iy), ir, thickness)
+                    inner_r = max(1, int(ir * 0.7))
+                    pygame.draw.circle(surface, color, (ix, iy), inner_r,
+                                       max(1, thickness // 2))
+                else:
+                    points = [
+                        (obj.x + obj.radius * math.cos(
+                            i * 2 * math.pi / obj.sides + state.rotation_xy),
+                         obj.y + obj.radius * math.sin(
+                            i * 2 * math.pi / obj.sides + state.rotation_xy))
+                        for i in range(obj.sides)
+                    ]
+                    pygame.draw.polygon(surface, color, points, thickness)
+            except (OverflowError, ValueError, TypeError):
+                continue
+
+
+class LuminanceTransientEffect(Effect):
+    """Sharp dark-to-light transitions for direct photonic dopamine release.
+
+    Raw light stimuli directly trigger dopamine transients in the lateral
+    nucleus accumbens (LNAc). Instantaneous dark-to-light transitions
+    produce high-amplitude dopamine transients peaking ~434ms after onset.
+    This response is unconditional — independent of reward history or
+    learned associations. The transitions must be SHARP, not gradual.
+    """
+
+    def __init__(self, config: Config):
+        super().__init__(config)
+        self.flash_active = False
+        self.flash_timer = 0.0
+        self.flash_duration = 0.0
+        self.next_flash_interval = 2.0
+        self.interval_timer = 0.0
+        self.flash_color: tuple[int, int, int] = (255, 255, 255)
+        self.flash_surface: pygame.Surface | None = None
+
+    def _trigger_flash(self) -> None:
+        self.flash_active = True
+        self.flash_timer = 0.0
+        self.flash_duration = random.uniform(0.05, 0.15)
+
+        if self.config.color_mode == "dopamine" or random.random() < 0.3:
+            self.flash_color = clamp_rgb(
+                random.randint(220, 255), random.randint(120, 200),
+                random.randint(0, 50))
+        else:
+            brightness = random.randint(200, 255)
+            self.flash_color = (brightness, brightness, brightness)
+
+        self.next_flash_interval = random.uniform(
+            0.8 / self.config.intensity, 4.0 / self.config.intensity
+        )
+
+    def update(self, state: State) -> None:
+        if self.flash_active:
+            self.flash_timer += state.delta_time
+            if self.flash_timer >= self.flash_duration:
+                self.flash_active = False
+                self.interval_timer = 0.0
+        else:
+            self.interval_timer += state.delta_time
+            if self.interval_timer >= self.next_flash_interval:
+                self._trigger_flash()
+
+    def render(self, surface: pygame.Surface, state: State) -> None:
+        if not self.enabled or not self.flash_active:
+            return
+
+        if (
+            self.flash_surface is None
+            or self.flash_surface.get_size() != surface.get_size()
+        ):
+            self.flash_surface = pygame.Surface(surface.get_size(), pygame.SRCALPHA)
+
+        progress = self.flash_timer / self.flash_duration if self.flash_duration > 0 else 1.0
+        if progress < 0.1:
+            alpha = int(255 * self.config.intensity)
+        else:
+            decay = 1.0 - ((progress - 0.1) / 0.9)
+            alpha = int(255 * self.config.intensity * max(0.0, decay))
+
+        self.flash_surface.fill((*self.flash_color, max(0, min(255, alpha))))
+        surface.blit(self.flash_surface, (0, 0))
+
+
+class NoveltyInjectorEffect(Effect):
+    """Variable ratio reward schedule — unpredictable visual payoff events.
+
+    The single most potent behavioral design for sustained dopaminergic
+    activation is the variable ratio (VR) reinforcement schedule: reward
+    delivered after an unpredictable number of responses/time intervals.
+    This produces the highest, most persistent response rates.
+
+    The anticipation of reward — not the reward itself — drives the
+    dopamine spike. Subtle anticipation cues build tension before the
+    payoff event, then deliver a high-salience visual burst.
+    """
+
+    def __init__(self, config: Config):
+        super().__init__(config)
+        self.payoff_timer = 0.0
+        self.next_payoff = self._next_interval()
+        self.anticipation_phase = 0.0
+        self.payoff_active = False
+        self.payoff_progress = 0.0
+        self.payoff_duration = 0.0
+        self.payoff_type = 0
+        self.payoff_surface: pygame.Surface | None = None
+
+    def _next_interval(self) -> float:
+        base = random.uniform(3.0, 12.0) / self.config.intensity
+        return base * random.uniform(0.5, 2.0)
+
+    def update(self, state: State) -> None:
+        if self.payoff_active:
+            self.payoff_progress += state.delta_time
+            if self.payoff_progress >= self.payoff_duration:
+                self.payoff_active = False
+                self.payoff_timer = 0.0
+                self.next_payoff = self._next_interval()
+                self.anticipation_phase = 0.0
+        else:
+            self.payoff_timer += state.delta_time
+            remaining = self.next_payoff - self.payoff_timer
+            if remaining < 1.5:
+                self.anticipation_phase = 1.0 - (remaining / 1.5)
+            if self.payoff_timer >= self.next_payoff:
+                self._trigger_payoff()
+
+    def _trigger_payoff(self) -> None:
+        self.payoff_active = True
+        self.payoff_progress = 0.0
+        self.payoff_duration = random.uniform(0.3, 0.8)
+        self.payoff_type = random.randint(0, 3)
+
+    def render(self, surface: pygame.Surface, state: State) -> None:
+        if not self.enabled:
+            return
+
+        if (
+            self.payoff_surface is None
+            or self.payoff_surface.get_size() != surface.get_size()
+        ):
+            self.payoff_surface = pygame.Surface(surface.get_size(), pygame.SRCALPHA)
+
+        if not self.payoff_active and self.anticipation_phase > 0.0:
+            self._render_anticipation(surface, state)
+
+        if self.payoff_active:
+            self._render_payoff(surface, state)
+
+    def _render_anticipation(self, surface: pygame.Surface, state: State) -> None:
+        pulse = (math.sin(self.anticipation_phase * 8 * math.pi) + 1.0) / 2.0
+        border_w = int(3 + 8 * self.anticipation_phase * pulse)
+
+        color = get_color(offset=state.hue_offset, value=0.5 + 0.5 * pulse)
+        alpha = int(60 * self.anticipation_phase * self.config.intensity)
+        color_a = (*color, max(0, min(255, alpha)))
+
+        self.payoff_surface.fill((0, 0, 0, 0))
+        w, h = surface.get_size()
+        pygame.draw.rect(self.payoff_surface, color_a,
+                         (0, 0, w, border_w))
+        pygame.draw.rect(self.payoff_surface, color_a,
+                         (0, h - border_w, w, border_w))
+        pygame.draw.rect(self.payoff_surface, color_a,
+                         (0, 0, border_w, h))
+        pygame.draw.rect(self.payoff_surface, color_a,
+                         (w - border_w, 0, border_w, h))
+        surface.blit(self.payoff_surface, (0, 0))
+
+    def _render_payoff(self, surface: pygame.Surface, state: State) -> None:
+        progress = self.payoff_progress / self.payoff_duration
+        decay = 1.0 - progress ** 1.5
+
+        cx, cy = self.config.width // 2, self.config.height // 2
+
+        if self.payoff_type == 0:
+            num_rays = random.randint(6, 16)
+            max_len = max(self.config.width, self.config.height) * 0.7
+            for i in range(num_rays):
+                angle = i * 2 * math.pi / num_rays + state.rotation_xy
+                length = max_len * progress * decay
+                color = get_color(offset=i * 0.1 + state.hue_offset,
+                                  value=decay)
+                end_x = cx + length * math.cos(angle)
+                end_y = cy + length * math.sin(angle)
+                try:
+                    pygame.draw.line(surface, color, (cx, cy),
+                                     (int(end_x), int(end_y)),
+                                     max(1, int(4 * decay)))
+                except (OverflowError, TypeError):
+                    continue
+
+        elif self.payoff_type == 1:
+            max_r = int(max(self.config.width, self.config.height) * 0.5 * progress)
+            for ring in range(5):
+                r = max(1, int(max_r * (ring + 1) / 5))
+                color = get_color(offset=ring * 0.2 + state.hue_offset,
+                                  value=decay)
+                try:
+                    pygame.draw.circle(surface, color, (cx, cy), r,
+                                       max(1, int(3 * decay)))
+                except (OverflowError, ValueError):
+                    continue
+
+        elif self.payoff_type == 2:
+            num_particles = int(30 * self.config.intensity)
+            for i in range(num_particles):
+                angle = random.uniform(0, 2 * math.pi)
+                dist = max(self.config.width, self.config.height) * 0.4 * progress
+                px = cx + dist * math.cos(angle)
+                py = cy + dist * math.sin(angle)
+                size = max(1, int(6 * decay))
+                color = get_color(offset=random.random() + state.hue_offset,
+                                  value=decay)
+                try:
+                    pygame.draw.circle(surface, color, (int(px), int(py)), size)
+                except (OverflowError, ValueError, TypeError):
+                    continue
+
+        else:
+            num_shapes = random.randint(3, 8)
+            for i in range(num_shapes):
+                sx = random.randint(0, self.config.width)
+                sy = random.randint(0, self.config.height)
+                size = int(random.randint(20, 80) * decay * self.config.intensity)
+                color = get_color(offset=random.random() + state.hue_offset,
+                                  value=decay)
+                if size > 0:
+                    try:
+                        sides = random.randint(3, 6)
+                        points = [
+                            (sx + size * math.cos(j * 2 * math.pi / sides),
+                             sy + size * math.sin(j * 2 * math.pi / sides))
+                            for j in range(sides)
+                        ]
+                        pygame.draw.polygon(surface, color, points)
+                    except (OverflowError, ValueError, TypeError):
+                        continue
+
+
+class AmbiguityResolveEffect(Effect):
+    """Blur-to-resolve cycles exploiting the perceptual curiosity/dopamine loop.
+
+    Perceptual curiosity peaks at intermediate confidence — when the brain
+    senses it ALMOST knows what it's looking at. Phase 1 (ambiguity):
+    degraded shapes activate anterior insula and ACC (arousal). Phase 2
+    (resolve): clarity activates striatal reward regions (nucleus accumbens),
+    producing dopamine. The sweet spot is partial legibility.
+
+    Uses pygame scale-down-then-up for blur simulation.
+    """
+
+    def __init__(self, config: Config):
+        super().__init__(config)
+        self.cycle_timer = 0.0
+        self.ambiguity_duration = 3.0
+        self.resolve_duration = 2.0
+        self.hold_duration = 1.0
+        self.phase = "ambiguous"
+        self.blur_level = 1.0
+        self.pattern_surface: pygame.Surface | None = None
+        self.pattern_needs_regen = True
+        self.pattern_type = 0
+
+    def _generate_pattern(self, size: tuple[int, int]) -> None:
+        self.pattern_surface = pygame.Surface(size, pygame.SRCALPHA)
+        self.pattern_surface.fill((0, 0, 0, 0))
+        self.pattern_type = random.randint(0, 3)
+
+        cx, cy = size[0] // 2, size[1] // 2
+        base_size = min(size[0], size[1]) // 3
+
+        if self.pattern_type == 0:
+            for ring in range(6, 0, -1):
+                r = int(base_size * ring / 6)
+                hue = ring * 0.15
+                color = hsv_to_rgb(hue, 0.9, 0.9)
+                pygame.draw.circle(self.pattern_surface, (*color, 200),
+                                   (cx, cy), r)
+
+        elif self.pattern_type == 1:
+            for i in range(5):
+                sides = 3 + i
+                r = base_size * (5 - i) / 5
+                hue = i * 0.18
+                color = hsv_to_rgb(hue, 0.9, 0.9)
+                points = [
+                    (cx + r * math.cos(j * 2 * math.pi / sides + i * 0.3),
+                     cy + r * math.sin(j * 2 * math.pi / sides + i * 0.3))
+                    for j in range(sides)
+                ]
+                pygame.draw.polygon(self.pattern_surface, (*color, 180),
+                                    points, max(1, int(4 - i * 0.5)))
+
+        elif self.pattern_type == 2:
+            for arm in range(5):
+                points = []
+                for t in range(40):
+                    tt = t / 40.0
+                    r = base_size * tt
+                    angle = arm * 2 * math.pi / 5 + tt * 3 * math.pi
+                    px = cx + r * math.cos(angle)
+                    py = cy + r * math.sin(angle)
+                    points.append((px, py))
+                if len(points) > 1:
+                    hue = arm * 0.2
+                    color = hsv_to_rgb(hue, 0.9, 0.9)
+                    pygame.draw.lines(self.pattern_surface, (*color, 200),
+                                      False, points, 3)
+
+        else:
+            self._draw_fractal_tree(self.pattern_surface, cx, cy + base_size,
+                                     -math.pi / 2, base_size * 0.6, 0, 6)
+
+        self.pattern_needs_regen = False
+
+    def _draw_fractal_tree(self, surface: pygame.Surface, x: float, y: float,
+                            angle: float, length: float, depth: int,
+                            max_depth: int) -> None:
+        if depth >= max_depth or length < 3:
+            return
+        end_x = x + length * math.cos(angle)
+        end_y = y + length * math.sin(angle)
+        hue = depth * 0.12
+        color = hsv_to_rgb(hue, 0.8, 0.9)
+        thick = max(1, int(4 - depth * 0.5))
+        pygame.draw.line(surface, (*color, 200),
+                         (int(x), int(y)), (int(end_x), int(end_y)), thick)
+
+        spread = 0.4 + random.uniform(-0.1, 0.1)
+        self._draw_fractal_tree(surface, end_x, end_y,
+                                 angle - spread, length * 0.7, depth + 1, max_depth)
+        self._draw_fractal_tree(surface, end_x, end_y,
+                                 angle + spread, length * 0.7, depth + 1, max_depth)
+
+    def update(self, state: State) -> None:
+        self.cycle_timer += state.delta_time
+
+        if self.phase == "ambiguous":
+            progress = min(1.0, self.cycle_timer / self.ambiguity_duration)
+            self.blur_level = 1.0 - progress * 0.3
+            if self.cycle_timer >= self.ambiguity_duration:
+                self.phase = "resolving"
+                self.cycle_timer = 0.0
+
+        elif self.phase == "resolving":
+            progress = min(1.0, self.cycle_timer / self.resolve_duration)
+            self.blur_level = 0.7 - progress * 0.65
+            if self.cycle_timer >= self.resolve_duration:
+                self.phase = "holding"
+                self.cycle_timer = 0.0
+                self.blur_level = 0.05
+
+        elif self.phase == "holding":
+            if self.cycle_timer >= self.hold_duration:
+                self.phase = "ambiguous"
+                self.cycle_timer = 0.0
+                self.blur_level = 1.0
+                self.pattern_needs_regen = True
+
+    def render(self, surface: pygame.Surface, state: State) -> None:
+        if not self.enabled:
+            return
+
+        size = surface.get_size()
+        if self.pattern_needs_regen or self.pattern_surface is None:
+            self._generate_pattern(size)
+
+        if self.pattern_surface is None:
+            return
+
+        scale_factor = max(0.04, self.blur_level)
+        small_w = max(1, int(size[0] * scale_factor))
+        small_h = max(1, int(size[1] * scale_factor))
+
+        try:
+            small = pygame.transform.scale(self.pattern_surface,
+                                            (small_w, small_h))
+            blurred = pygame.transform.scale(small, size)
+            surface.blit(blurred, (0, 0))
+        except (pygame.error, ValueError):
+            pass
+
+
+class BrainModeSequencer:
+    """Auto-cycles through perceptual effect combinations.
+
+    Sequences effects in patterns designed for maximum perceptual disruption:
+    adaptation -> afterimage, stroboscopic -> ganzfeld, Moiré -> drift, etc.
+    """
+
+    SEQUENCES = [
+        # Phase 1: Subcortical priming (SC→VTA fast lane)
+        {"name": "Subcortical Blast", "effects": ["looming", "luminance_transient"],
+         "duration": 12.0},
+        # Phase 2: Alpha entrainment + deprivation
+        {"name": "Alpha Entrainment", "effects": ["stroboscopic", "ganzfeld"],
+         "duration": 15.0},
+        # Phase 3: Curiosity/dopamine loop
+        {"name": "Curiosity Loop", "effects": ["ambiguity_resolve", "novelty_injector"],
+         "duration": 18.0},
+        # Phase 4: Directional neuron fatigue
+        {"name": "Motion Fatigue", "effects": ["aftereffect", "moire"],
+         "duration": 20.0},
+        # Phase 5: Peripheral vision exploit
+        {"name": "Peripheral Assault", "effects": ["peripheral_drift", "hermann_grid"],
+         "duration": 15.0},
+        # Phase 6: Opponent-process + deprivation
+        {"name": "Color Opponent", "effects": ["opponent_color", "ganzfeld"],
+         "duration": 20.0},
+        # Phase 7: Dopamine stack — looming + novelty + luminance (all DA pathways)
+        {"name": "Dopamine Stack", "effects": [
+            "looming", "luminance_transient", "novelty_injector",
+         ], "duration": 15.0},
+        # Phase 8: Full spectrum assault
+        {"name": "Full Spectrum", "effects": [
+            "stroboscopic", "moire", "aftereffect", "peripheral_drift",
+            "looming", "novelty_injector",
+         ], "duration": 12.0},
+        # Phase 9: Deep ganzfeld for hallucination induction
+        {"name": "Deep Ganzfeld", "effects": ["ganzfeld"], "duration": 25.0},
+        # Phase 10: Gamma entrainment (34-40Hz red light)
+        {"name": "Gamma Entrainment", "effects": ["stroboscopic", "looming"],
+         "duration": 15.0},
+    ]
+
+    EFFECT_MAP: dict[str, type] = {}
+
+    def __init__(self, effect_manager: "EffectManager"):
+        self.effect_manager = effect_manager
+        self.active = False
+        self.current_sequence = 0
+        self.timer = 0.0
+
+        BrainModeSequencer.EFFECT_MAP = {
+            "stroboscopic": StroboscopicEffect,
+            "moire": MoireEffect,
+            "aftereffect": MotionAftereffect,
+            "peripheral_drift": PeripheralDriftEffect,
+            "ganzfeld": GanzfeldEffect,
+            "hermann_grid": HermannGridEffect,
+            "opponent_color": OpponentColorEffect,
+            "looming": LoomingEffect,
+            "luminance_transient": LuminanceTransientEffect,
+            "novelty_injector": NoveltyInjectorEffect,
+            "ambiguity_resolve": AmbiguityResolveEffect,
+        }
+
+    def toggle(self) -> bool:
+        self.active = not self.active
+        if self.active:
+            self.current_sequence = 0
+            self.timer = 0.0
+            self._apply_sequence()
+        return self.active
+
+    def update(self, state: State) -> None:
+        if not self.active:
+            return
+
+        self.timer += state.delta_time
+        seq = self.SEQUENCES[self.current_sequence]
+
+        if self.timer >= seq["duration"]:
+            self.timer = 0.0
+            self.current_sequence = (self.current_sequence + 1) % len(self.SEQUENCES)
+            self._apply_sequence()
+
+    def _apply_sequence(self) -> None:
+        seq = self.SEQUENCES[self.current_sequence]
+        active_types: set[type] = set()
+        for name in seq["effects"]:
+            effect_type = self.EFFECT_MAP.get(name)
+            if effect_type:
+                active_types.add(effect_type)
+                if self.effect_manager.get_effect(effect_type) is None:
+                    new_effect = effect_type(self.effect_manager.config)
+                    self.effect_manager.effects.append(new_effect)
+
+        for effect in self.effect_manager.effects:
+            if type(effect) in self.EFFECT_MAP.values():
+                effect.enabled = type(effect) in active_types
+
+    def get_current_name(self) -> str:
+        if not self.active:
+            return ""
+        return self.SEQUENCES[self.current_sequence]["name"]
+
+
 class EffectManager:
     """Manages and orchestrates multiple effects."""
 
@@ -1035,6 +2230,7 @@ class EffectManager:
         self.config = config
         self.effects: list[Effect] = []
         self._initialize_effects()
+        self.brain_sequencer = BrainModeSequencer(self)
 
     def _initialize_effects(self) -> None:
         if self.config.enable_flicker:
@@ -1057,8 +2253,31 @@ class EffectManager:
             self.effects.append(ChromaticAberrationEffect(self.config))
         if self.config.enable_crt:
             self.effects.append(CRTEffect(self.config))
+        if self.config.enable_stroboscopic:
+            self.effects.append(StroboscopicEffect(self.config))
+        if self.config.enable_moire:
+            self.effects.append(MoireEffect(self.config))
+        if self.config.enable_aftereffect:
+            self.effects.append(MotionAftereffect(self.config))
+        if self.config.enable_peripheral_drift:
+            self.effects.append(PeripheralDriftEffect(self.config))
+        if self.config.enable_ganzfeld:
+            self.effects.append(GanzfeldEffect(self.config))
+        if self.config.enable_hermann_grid:
+            self.effects.append(HermannGridEffect(self.config))
+        if self.config.enable_opponent_color:
+            self.effects.append(OpponentColorEffect(self.config))
+        if self.config.enable_looming:
+            self.effects.append(LoomingEffect(self.config))
+        if self.config.enable_luminance_transient:
+            self.effects.append(LuminanceTransientEffect(self.config))
+        if self.config.enable_novelty_injector:
+            self.effects.append(NoveltyInjectorEffect(self.config))
+        if self.config.enable_ambiguity_resolve:
+            self.effects.append(AmbiguityResolveEffect(self.config))
 
     def update(self, state: State) -> None:
+        self.brain_sequencer.update(state)
         for effect in self.effects:
             if effect.enabled:
                 effect.update(state)
@@ -1154,23 +2373,30 @@ class UIOverlay:
             "[SPACE]   Toggle high contrast",
             "[M]       Cycle color mode",
             "[1-0]     Toggle effects",
-            "[P]       Pause",
-            "[R]       Randomize",
+            "[P]       Pause  [R] Randomize",
             "[S]       Save preset",
             "[H]       Toggle this help",
             "[ESC/Q]   Quit",
             "",
-            "Effects: 1=Flicker 2=Waves 3=Spirals",
-            "         4=Tesseract 5=Fractals 6=Particles",
-            "         7=Distortion 8=Scanlines",
-            "         9=Chromatic 0=CRT",
+            "Classic: 1=Flicker 2=Waves 3=Spirals",
+            "  4=Tesseract 5=Fractals 6=Particles",
+            "  7=Distortion 8=Scanlines",
+            "  9=Chromatic 0=CRT",
+            "",
+            "Brain:  F1=Strobe F2=Moire F3=Aftereffect",
+            "  F4=PeriphDrift F5=Ganzfeld F6=Hermann",
+            "  F7=OpponentColor F8=Looming F9=Flash",
+            "  F10=Novelty F11=Ambiguity",
+            "  [G]=Gamma36Hz [B]=Brain Mode Seq",
         ]
 
-        overlay = pygame.Surface((400, 400), pygame.SRCALPHA)
+        overlay_w = 420
+        overlay_h = 20 + len(help_lines) * 22 + 20
+        overlay = pygame.Surface((overlay_w, overlay_h), pygame.SRCALPHA)
         overlay.fill((0, 0, 0, 200))
 
-        x = (self.config.width - 400) // 2
-        y = (self.config.height - 400) // 2
+        x = (self.config.width - overlay_w) // 2
+        y = (self.config.height - overlay_h) // 2
         surface.blit(overlay, (x, y))
 
         for i, line in enumerate(help_lines):
@@ -1371,7 +2597,7 @@ def handle_input(
         state.message = f"CRT: {'ON' if enabled else 'OFF'}"
         state.message_timer = 1.0
     elif key == pygame.K_m:
-        modes = ["psychedelic", "fire", "ice", "matrix", "monochrome"]
+        modes = ["psychedelic", "fire", "ice", "matrix", "monochrome", "dopamine"]
         current_idx = (
             modes.index(config.color_mode) if config.color_mode in modes else 0
         )
@@ -1384,6 +2610,75 @@ def handle_input(
         config.save_preset(preset_path)
         state.message = f"Saved: {preset_path}"
         state.message_timer = 2.0
+    elif key == pygame.K_F1:
+        _ensure_and_toggle(effect_manager, StroboscopicEffect, config, state,
+                           "Stroboscopic")
+    elif key == pygame.K_F2:
+        _ensure_and_toggle(effect_manager, MoireEffect, config, state, "Moiré")
+    elif key == pygame.K_F3:
+        _ensure_and_toggle(effect_manager, MotionAftereffect, config, state,
+                           "Motion Aftereffect")
+    elif key == pygame.K_F4:
+        _ensure_and_toggle(effect_manager, PeripheralDriftEffect, config, state,
+                           "Peripheral Drift")
+    elif key == pygame.K_F5:
+        _ensure_and_toggle(effect_manager, GanzfeldEffect, config, state, "Ganzfeld")
+    elif key == pygame.K_F6:
+        _ensure_and_toggle(effect_manager, HermannGridEffect, config, state,
+                           "Hermann Grid")
+    elif key == pygame.K_F7:
+        _ensure_and_toggle(effect_manager, OpponentColorEffect, config, state,
+                           "Opponent Color")
+    elif key == pygame.K_F8:
+        _ensure_and_toggle(effect_manager, LoomingEffect, config, state,
+                           "Looming (SC->VTA)")
+    elif key == pygame.K_F9:
+        _ensure_and_toggle(effect_manager, LuminanceTransientEffect, config, state,
+                           "Luminance Transient")
+    elif key == pygame.K_F10:
+        _ensure_and_toggle(effect_manager, NoveltyInjectorEffect, config, state,
+                           "Novelty Injector (VR)")
+    elif key == pygame.K_F11:
+        _ensure_and_toggle(effect_manager, AmbiguityResolveEffect, config, state,
+                           "Ambiguity Resolve")
+    elif key == pygame.K_g:
+        strobe = effect_manager.get_effect(StroboscopicEffect)
+        if strobe is None:
+            strobe = StroboscopicEffect(config)
+            effect_manager.effects.append(strobe)
+        strobe.gamma_mode = not strobe.gamma_mode
+        if strobe.gamma_mode:
+            strobe.frequency = 36.0
+            strobe.enabled = True
+        state.message = f"Gamma 36Hz Red: {'ON' if strobe.gamma_mode else 'OFF'}"
+        state.message_timer = 1.5
+    elif key == pygame.K_b:
+        active = effect_manager.brain_sequencer.toggle()
+        if active:
+            seq_name = effect_manager.brain_sequencer.get_current_name()
+            state.message = f"BRAIN MODE: {seq_name}"
+        else:
+            state.message = "Brain Mode: OFF"
+        state.message_timer = 2.0
+
+
+def _ensure_and_toggle(
+    effect_manager: EffectManager,
+    effect_type: type,
+    config: Config,
+    state: State,
+    name: str,
+) -> None:
+    """Toggle an effect, creating it on-the-fly if it wasn't enabled at startup."""
+    existing = effect_manager.get_effect(effect_type)
+    if existing is None:
+        new_effect = effect_type(config)
+        effect_manager.effects.append(new_effect)
+        state.message = f"{name}: ON"
+    else:
+        existing.toggle()
+        state.message = f"{name}: {'ON' if existing.enabled else 'OFF'}"
+    state.message_timer = 1.0
 
 
 def main() -> None:
@@ -1427,6 +2722,10 @@ def main() -> None:
     flags = pygame.DOUBLEBUF
     if config.fullscreen:
         flags |= pygame.FULLSCREEN
+        display_info = pygame.display.Info()
+        config.width = display_info.current_w
+        config.height = display_info.current_h
+        logger.info(f"Fullscreen: using display resolution {config.width}x{config.height}")
 
     screen = pygame.display.set_mode((config.width, config.height), flags)
     pygame.display.set_caption("Brain Fuzzer: Visual Perception Research Tool")
@@ -1440,6 +2739,10 @@ def main() -> None:
         run_startup_sequence(screen, config)
 
     effect_manager = EffectManager(config)
+
+    if config.brain_mode:
+        effect_manager.brain_sequencer.toggle()
+        logger.info("Brain mode sequencer activated")
 
     start_time = time.time()
     last_time = start_time
